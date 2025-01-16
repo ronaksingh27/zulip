@@ -1,0 +1,46 @@
+name: Monitor Zulip Issues by alya
+
+on:
+  schedule:
+    - cron: "*/15 * * * *" # Runs every 15 minutes
+  workflow_dispatch: # Allow manual trigger of the workflow
+
+jobs:
+  monitor-issues:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Fetch Issues from Zulip Repository
+      id: fetch-issues
+      env:
+        ZULIP_TOKEN: ${{ secrets.ZULIP_TOKEN }}
+      run: |
+        # Fetch issues from the Zulip repository using the API
+        curl -s -H "Authorization: Bearer $ZULIP_TOKEN" \
+          https://api.github.com/repos/zulip/zulip/issues > issues.json
+
+        # Filter issues created by the user 'alya'
+        jq -r '.[] | select(.user.login == "alya") | .html_url' issues.json > filtered_issues.txt
+
+        # Check if any issues by 'alya' are found
+        if [ -s filtered_issues.txt ]; then
+          echo "Found issues by alya:"
+          cat filtered_issues.txt
+        else
+          echo "No issues by alya found in Zulip repository."
+        fi
+
+    - name: Send Email Notification
+      if: ${{ success() && steps.fetch-issues.outputs.filtered_issues }}
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 465
+        username: ${{ secrets.EMAIL_USERNAME }}
+        password: ${{ secrets.EMAIL_PASSWORD }}
+        subject: "New Issues by alya in Zulip Repository"
+        body: |
+          The following issues were created by alya in the Zulip repository:
+          $(cat filtered_issues.txt)
+        to: ronaksingh2708@gmail.com
+        from: ${{ secrets.EMAIL_USERNAME }}
